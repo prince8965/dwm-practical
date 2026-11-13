@@ -1,0 +1,6 @@
+TransactionID,Item1,Item2,Item3,Item4
+T1,Milk,Bread,Butter,
+T2,Bread,Butter,Eggs,
+T3,Milk,Bread,,
+T4,Milk,Bread,Butter,Eggs
+T5,Bread,Eggs,,
