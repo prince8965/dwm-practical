@@ -1,0 +1,50 @@
+Dwm Practical
+Exp 3: Olap opearation
+
+CREATE TABLE Sales (
+    Product VARCHAR(50),
+    City VARCHAR(50),
+    Year INT,
+    Quarter VARCHAR(10),
+    Amount INT
+);
+INSERT INTO Sales VALUES
+('Mobile', 'Mumbai', 2024, 'Q1', 10000),
+('Laptop', 'Mumbai', 2024, 'Q1', 20000),
+('Mobile', 'Pune', 2024, 'Q2', 15000),
+('Laptop', 'Pune', 2024, 'Q2', 25000),
+('Mobile', 'Mumbai', 2025, 'Q1', 12000),
+('Laptop', 'Mumbai', 2025, 'Q1', 30000);
+
+Roll up…
+SELECT Year, SUM(Amount) AS Total_Sales
+FROM Sales
+GROUP BY Year;
+
+Drill down..
+SELECT Year, Quarter, SUM(Amount) AS Total_Sales
+FROM Sales
+GROUP BY Year, Quarter;
+
+Slice..
+SELECT *
+FROM Sales
+WHERE Year = 2024;
+
+Dice..
+SELECT *
+FROM Sales
+WHERE Year = 2024
+AND City = 'Mumbai'
+AND Product IN ('Mobile', 'Laptop');
+
+Pivot..
+SELECT
+    Product,
+    SUM(CASE WHEN City = 'Mumbai'
+        THEN Amount ELSE 0 END) AS Mumbai,
+    SUM(CASE WHEN City = 'Pune'
+        THEN Amount ELSE 0 END) AS Pune
+FROM Sales
+GROUP BY Product;
+

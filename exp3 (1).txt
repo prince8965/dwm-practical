@@ -1,0 +1,152 @@
+-- ============================================================
+-- OLAP Operations on a Sales Data Warehouse
+-- Schema: Sales_Fact + Product_Dim + Location_Dim + Time_Dim
+-- Dialect: MySQL / MariaDB (as used in MySQL Workbench)
+--
+-- Sections:
+--   1. CREATE DATABASE + TABLES
+--   2. INSERT sample data
+--   3. Slice       - one dimension fixed (City = Mumbai)
+--   4. Dice        - two dimensions fixed (Electronics + July)
+--   5. Roll-up     - month level aggregation
+--   6. Drill-down  - date level detail
+--   7. Pivot       - Product rows x City columns
+-- ============================================================
+
+DROP DATABASE IF EXISTS olap_db;
+CREATE DATABASE olap_db;
+USE olap_db;
+
+-- ------------------------------------------------------------
+-- 1. TABLES
+-- ------------------------------------------------------------
+
+CREATE TABLE Product_Dim (
+    ProductID   INT PRIMARY KEY,
+    ProductName VARCHAR(50),
+    Category    VARCHAR(50)
+);
+
+CREATE TABLE Location_Dim (
+    LocationID INT PRIMARY KEY,
+    City       VARCHAR(50)
+);
+
+CREATE TABLE Time_Dim (
+    TimeID     INT PRIMARY KEY,
+    DateValue  DATE,
+    MonthName  VARCHAR(20)
+);
+
+CREATE TABLE Sales_Fact (
+    ProductID   INT,
+    TimeID      INT,
+    LocationID  INT,
+    SalesAmount DECIMAL(10,2),
+
+    FOREIGN KEY (ProductID)  REFERENCES Product_Dim(ProductID),
+    FOREIGN KEY (TimeID)     REFERENCES Time_Dim(TimeID),
+    FOREIGN KEY (LocationID) REFERENCES Location_Dim(LocationID)
+);
+
+-- ------------------------------------------------------------
+-- 2. SAMPLE DATA
+-- ------------------------------------------------------------
+
+INSERT INTO Product_Dim (ProductID, ProductName, Category)
+VALUES
+(1, 'Laptop', 'Electronics'),
+(2, 'Mobile', 'Electronics'),
+(3, 'Chair',  'Furniture');
+
+INSERT INTO Location_Dim (LocationID, City)
+VALUES
+(1, 'Mumbai'),
+(2, 'Pune'),
+(3, 'Nashik');
+
+INSERT INTO Time_Dim (TimeID, DateValue, MonthName)
+VALUES
+(1, '2026-07-05', 'July'),
+(2, '2026-07-10', 'July'),
+(3, '2026-08-15', 'August'),
+(4, '2026-08-20', 'August'),
+(5, '2026-09-05', 'September'),
+(6, '2026-09-15', 'September');
+
+INSERT INTO Sales_Fact (ProductID, TimeID, LocationID, SalesAmount)
+VALUES
+(1, 1, 1, 5000.00),   -- Laptop, 2026-07-05, Mumbai
+(2, 2, 2, 7000.00),   -- Mobile, 2026-07-10, Pune
+(1, 3, 3, 4000.00),   -- Laptop, 2026-08-15, Nashik
+(3, 4, 1, 9000.00),   -- Chair,  2026-08-20, Mumbai
+(2, 5, 2, 6500.00),   -- Mobile, 2026-09-05, Pune
+(3, 6, 3, 8500.00);   -- Chair,  2026-09-15, Nashik
+
+-- ------------------------------------------------------------
+-- 3. SLICE  (fix one dimension: City = Mumbai)
+-- ------------------------------------------------------------
+-- Expected: Mumbai | Laptop | 5000
+--           Mumbai | Chair  | 9000
+
+SELECT l.City, p.ProductName, s.SalesAmount
+FROM Sales_Fact s
+JOIN Product_Dim  p ON s.ProductID  = p.ProductID
+JOIN Location_Dim l ON s.LocationID = l.LocationID
+WHERE l.City = 'Mumbai';
+
+-- ------------------------------------------------------------
+-- 4. DICE  (fix two dimensions: Electronics AND July)
+-- ------------------------------------------------------------
+-- Expected: July | Laptop | Mumbai | 5000
+--           July | Mobile | Pune   | 7000
+
+SELECT t.MonthName, p.ProductName, l.City, s.SalesAmount
+FROM Sales_Fact s
+JOIN Product_Dim  p ON s.ProductID  = p.ProductID
+JOIN Time_Dim     t ON s.TimeID     = t.TimeID
+JOIN Location_Dim l ON s.LocationID = l.LocationID
+WHERE p.Category = 'Electronics'
+  AND t.MonthName = 'July';
+
+-- ------------------------------------------------------------
+-- 5. ROLL-UP  (aggregate from date level up to month level)
+-- ------------------------------------------------------------
+-- Expected: August 13000 / July 12000 / September 15000
+
+SELECT t.MonthName,
+       SUM(s.SalesAmount) AS TotalSales
+FROM Sales_Fact s
+JOIN Time_Dim t ON s.TimeID = t.TimeID
+GROUP BY t.MonthName;
+
+-- ------------------------------------------------------------
+-- 6. DRILL-DOWN  (expand from month level to individual dates)
+-- ------------------------------------------------------------
+-- Expected: 2026-07-05 July 5000
+--           2026-07-10 July 7000
+--           2026-08-15 August 4000
+--           2026-08-20 August 9000
+--           2026-09-05 September 6500
+--           2026-09-15 September 8500
+
+SELECT t.DateValue, t.MonthName, s.SalesAmount
+FROM Sales_Fact s
+JOIN Time_Dim t ON s.TimeID = t.TimeID
+ORDER BY t.DateValue;
+
+-- ------------------------------------------------------------
+-- 7. PIVOT  (products down the side, cities across the top)
+-- ------------------------------------------------------------
+-- Expected: Chair  9000     0  8500
+--           Laptop 5000     0  4000
+--           Mobile    0 13500     0
+
+SELECT p.ProductName,
+       SUM(CASE WHEN l.City = 'Mumbai' THEN s.SalesAmount ELSE 0 END) AS Mumbai,
+       SUM(CASE WHEN l.City = 'Pune'   THEN s.SalesAmount ELSE 0 END) AS Pune,
+       SUM(CASE WHEN l.City = 'Nashik' THEN s.SalesAmount ELSE 0 END) AS Nashik
+FROM Sales_Fact s
+JOIN Product_Dim  p ON s.ProductID  = p.ProductID
+JOIN Location_Dim l ON s.LocationID = l.LocationID
+GROUP BY p.ProductName;
